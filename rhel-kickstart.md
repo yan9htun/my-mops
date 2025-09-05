@@ -2,7 +2,15 @@
 
 This document outlines the steps to create a customized RHEL 8.10 Kickstart ISO.
 
-## 1. Create the Kickstart Configuration File (`ks.cfg`)
+## 1. Prerequisites: Install Required Tools
+
+Before you begin, ensure you have the necessary tools installed. On a Debian-based system (like Ubuntu), you can install them with the following command:
+
+```bash
+sudo apt-get install -y genisoimage xorriso p7zip-full
+```
+
+## 2. Create the Kickstart Configuration File (`ks.cfg`)
 
 Create a file named `ks.cfg` with your desired kickstart configuration. Here is an example configuration:
 
@@ -79,33 +87,27 @@ echo "Finished post-installation script"
 %end
 ```
 
-## 2. Prepare the Build Environment
+## 3. Prepare the Build Environment
 
-1.  **Install necessary tools**:
-
-    ```bash
-    sudo apt-get install -y genisoimage xorriso p7zip-full
-    ```
-
-2.  **Create a working directory**:
+1.  **Create a working directory**:
 
     ```bash
     mkdir kickstart_build
     ```
 
-3.  **Extract the RHEL 8.10 ISO**:
+2.  **Extract the RHEL 8.10 ISO**:
 
     ```bash
     7z x rhel-8.10-x86_64-dvd.iso -o./kickstart_build/
     ```
 
-4.  **Copy the Kickstart File**:
+3.  **Copy the Kickstart File**:
 
     ```bash
     cp ks.cfg kickstart_build/
     ```
 
-## 3. Modify Boot Configuration
+## 4. Modify Boot Configuration
 
 1.  **Modify `isolinux.cfg` for BIOS booting**:
 
@@ -115,7 +117,7 @@ echo "Finished post-installation script"
 
     Open `kickstart_build/EFI/BOOT/grub.cfg` and add a new menu entry for the kickstart installation, setting it as the default.
 
-## 4. Create the Kickstart ISO
+## 5. Create the Kickstart ISO
 
 Run the following command to create the new bootable ISO:
 
@@ -123,10 +125,10 @@ Run the following command to create the new bootable ISO:
 genisoimage -o rhel-8.10-kickstart.iso -b isolinux/isolinux.bin -c isolinux/boot.cat --no-emul-boot --boot-load-size 4 --boot-info-table -J -R -v -T -joliet-long -V 'RHEL-8-10-0-BaseOS-x86_64' kickstart_build/
 ```
 
-## 5. Make the ISO Hybrid (Optional)
+## 6. Best Practices
 
-To make the ISO bootable from a USB drive, you can use the `isohybrid` command. Note that this tool was not available during the creation of this guide.
-
-```bash
-isohybrid rhel-8.10-kickstart.iso
-```
+*   **Version Control:** Store your `ks.cfg` file in a version control system like Git to track changes.
+*   **Test in a VM:** Always test your kickstart file and the resulting ISO in a virtual machine before using it on physical hardware.
+*   **Minimal Packages:** In the `%packages` section, start with a minimal set of packages and add only what is necessary to reduce the image size and attack surface.
+*   **Security:** Avoid storing plaintext passwords in your kickstart file. Use encrypted passwords as shown in the example.
+*   **Post-install Scripts:** Use the `%post` section for configuration tasks that are difficult to do with standard kickstart commands. Keep these scripts as simple as possible and log their output for debugging.
