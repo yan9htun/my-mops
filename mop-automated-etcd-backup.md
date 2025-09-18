@@ -144,19 +144,31 @@ sudo systemctl stop kubelet.service
 
 ### Step 4.2: Restore the ETCD Snapshot
 
-Restore the `etcd` database from your snapshot into a temporary directory. This command includes the necessary certificate flags.
+This step restores the database from your snapshot file into a temporary directory.
 
 ```bash
-# Define the path to your snapshot file
+# --- Configuration ---
+# !!! IMPORTANT: Set this to the full path of the snapshot you want to restore !!!
 SNAPSHOT_TO_RESTORE="/var/lib/etcd-backups/etcd-snapshot-YYYY-MM-DD_HH-MM-SS.db"
 
-# Restore the snapshot to a new, temporary directory
+RESTORE_DIR="/var/lib/etcd-from-restore"
+ETCD_CERT="/etc/kubernetes/pki/etcd/server.crt"
+ETCD_CACERT="/etc/kubernetes/pki/etcd/ca.crt"
+ETCD_KEY="/etc/kubernetes/pki/etcd/server.key"
+
+# --- Restore Logic ---
+echo "Restoring ETCD from snapshot: ${SNAPSHOT_TO_RESTORE}"
+
+# Restore the snapshot to the new, temporary directory
 sudo ETCDCTL_API=3 etcdctl snapshot restore "${SNAPSHOT_TO_RESTORE}" \
-  --data-dir /var/lib/etcd-from-restore \
-  --cacert /etc/kubernetes/pki/etcd/ca.crt \
-  --cert /etc/kubernetes/pki/etcd/server.crt \
-  --key /etc/kubernetes/pki/etcd/server.key
+  --data-dir "${RESTORE_DIR}" \
+  --cacert "${ETCD_CACERT}" \
+  --cert "${ETCD_CERT}" \
+  --key "${ETCD_KEY}"
+
+echo "Restore complete."
 ```
+
 
 ### Step 4.3: Replace the ETCD Data Directory
 
