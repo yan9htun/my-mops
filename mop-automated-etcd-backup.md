@@ -20,9 +20,9 @@ This procedure uses a standard cron job on the control-plane host, as this is th
 
 ---
 
-### 3. Step-by-Step Procedure
+## 3. Step-by-Step Backup Procedure
 
-### Step 1: Create the Backup Script
+### Step 3.1: Create the Backup Script
 
 First, we will create the shell script that performs the backup and cleanup operations.
 
@@ -81,7 +81,7 @@ First, we will create the shell script that performs the backup and cleanup oper
 
 4.  **Save and exit the editor.**
 
-### Step 2: Make the Script Executable
+### Step 3.2: Make the Script Executable
 
 Make the script runnable by the system.
 
@@ -89,7 +89,7 @@ Make the script runnable by the system.
 sudo chmod +x /usr/local/bin/etcd-backup.sh
 ```
 
-### Step 3: Manually Test the Script
+### Step 3.3: Manually Test the Script
 
 Before scheduling the script, run it manually to ensure it works correctly.
 
@@ -103,7 +103,7 @@ Check the output for any errors. Then, verify that a new `.db` file has been cre
 ls -l /var/lib/etcd-backups/
 ```
 
-### Step 4: Schedule the Cron Job
+### Step 3.4: Schedule the Cron Job
 
 Now, we will use `cron` to schedule the script to run every 4 hours.
 
@@ -125,17 +125,68 @@ Now, we will use `cron` to schedule the script to run every 4 hours.
 
 ---
 
-## 4. Security Considerations
+## 4. Manual ETCD Restore Procedure
 
-*   **Secure Backup Files:** The script stores backups locally. You **must** add a step to your process to copy these snapshot files to a secure, remote location (e.g., an S3 bucket, a secure file server). This could be a separate cron job or a step added to the script itself.
-*   **Permissions:** The backup directory and script should have restrictive permissions, typically only accessible by the `root` user.
+> **WARNING:** This is a highly destructive procedure for disaster recovery. Only perform this on a new cluster or after a catastrophic failure of the existing control plane. Incorrectly performing these steps **will break your cluster**.
 
----
+### Scenario
 
-## 5. Rollback
+*   **The Event:** The cluster's control plane is non-functional and must be restored from a snapshot.
+*   **The Assets:** You have a trusted `etcd` snapshot file available on the master node.
 
-To disable the automated backup:
+### Step 4.1: Stop the Kubelet Service
 
-1.  **Open the root crontab:** `sudo crontab -e`
-2.  **Delete the line** you added in Step 4.
-3.  (Optional) Delete the script file: `sudo rm /usr/local/bin/etcd-backup.sh`
+On the primary master node, stop the kubelet service. This will stop all control plane pods, preventing any interference with the restore process.
+
+```bash
+sudo systemctl stop kubelet.service
+```
+
+### Step 4.2: Restore the ETCD Snapshot
+
+Restore the `etcd` database from your snapshot into a temporary directory. This command includes the necessary certificate flags.
+
+```bash
+# Define the path to your snapshot file
+SNAPSHOT_TO_RESTORE="/var/lib/etcd-backups/etcd-snapshot-YYYY-MM-DD_HH-MM-SS.db"
+
+# Restore the snapshot to a new, temporary directory
+sudo ETCDCTL_API=3 etcdctl snapshot restore "${SNAPSHOT_TO_RESTORE}" \
+  --data-dir /var/lib/etcd-from-restore \
+  --cacert /etc/kubernetes/pki/etcd/ca.crt \
+  --cert /etc/kubernetes/pki/etcd/server.crt \
+  --key /etc/kubernetes/pki/etcd/server.key
+```
+
+### Step 4.3: Replace the ETCD Data Directory
+
+Move the old, empty or corrupted `etcd` data directory aside and replace it with the directory containing your restored data.
+
+```bash
+# Move the old directory with a timestamped name
+sudo mv /var/lib/etcd /var/lib/etcd-old-$(date +%s)
+
+# Move the restored directory into the correct place
+sudo mv /var/lib/etcd-from-restore /var/lib/etcd
+```
+
+### Step 4.4: Restart the Kubelet Service
+
+Now that the restored data is in the correct location, restart the kubelet. It will start the control plane pods, which will now use the restored data.
+
+```bash
+sudo systemctl start kubelet.service
+```
+
+### Step 4.5: Verify Control Plane Health
+
+Wait several minutes for the system to stabilize. The kubelet needs time to start the control plane pods. Then, check the status from a machine with `kubectl` access.
+
+```bash
+# Check that the core components are running
+kubectl get pods -n kube-system
+
+# Check the status of the nodes
+kubectl get nodes
+```
+*You should see the `etcd`, `kube-apiserver`, etc. pods running. It may take time for all nodes to report a `Ready` status.*
